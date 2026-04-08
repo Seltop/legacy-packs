@@ -1,0 +1,12 @@
+{
+    "required": true,
+    "package": "com.legacypacks.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "client": [
+        "ResourcePackManagerMixin",
+        "DirectoryResourcePackMixin"
+    ],
+    "injectors": {
+        "defaultRequire": 1
+    }
+}
