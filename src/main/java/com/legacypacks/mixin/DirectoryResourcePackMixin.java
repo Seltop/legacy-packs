@@ -1,5 +1,6 @@
 package com.legacypacks.mixin;
 
+import com.legacypacks.ChestTextureTransformer;
 import com.legacypacks.LegacyPacksMod;
 import com.legacypacks.PathMappings;
 import com.legacypacks.SpriteSheetSlicing;
@@ -50,6 +51,21 @@ public abstract class DirectoryResourcePackMixin {
             return;
         }
 
+        // Single chest UV remapping (pack HAS the texture but UV layout changed in 1.15)
+        if (cir.getReturnValue() != null && ChestTextureTransformer.isSingleChestPath(id.getPath())) {
+            InputSupplier<InputStream> original = cir.getReturnValue();
+            cir.setReturnValue(() -> {
+                try (InputStream in = original.get()) {
+                    byte[] transformed = ChestTextureTransformer.transformSingleChest(in);
+                    if (transformed != null) {
+                        return new ByteArrayInputStream(transformed);
+                    }
+                }
+                return null;
+            });
+            return;
+        }
+
         if (cir.getReturnValue() != null) {
             return;
         }
@@ -90,7 +106,30 @@ public abstract class DirectoryResourcePackMixin {
                 }
             }
 
-            // Try 3: Provide mcmeta for virtual sprites
+            // Try 3: Double chest texture splitting
+            String path3 = id.getPath();
+            ChestTextureTransformer.ChestHalfInfo chestInfo = ChestTextureTransformer.getHalfInfo(path3);
+            if (chestInfo != null) {
+                Identifier doubleId = Identifier.of(id.getNamespace(), chestInfo.doubleTexturePath());
+                InputSupplier<InputStream> doubleSupplier = self.open(type, doubleId);
+                if (doubleSupplier != null) {
+                    boolean isLeft = chestInfo.isLeft();
+                    cir.setReturnValue(() -> {
+                        try (InputStream doubleStream = doubleSupplier.get()) {
+                            byte[] half = ChestTextureTransformer.splitDoubleChest(doubleStream, isLeft);
+                            if (half != null) {
+                                LegacyPacksMod.LOGGER.info("Legacy Packs: split {} from {}",
+                                        id, chestInfo.doubleTexturePath());
+                                return new ByteArrayInputStream(half);
+                            }
+                        }
+                        return null;
+                    });
+                    return;
+                }
+            }
+
+            // Try 4: Provide mcmeta for virtual sprites
             if (path.endsWith(".png.mcmeta")) {
                 String mcmeta = SpriteSheetSlicing.getMcmetaForPath(path);
                 if (mcmeta != null) {
@@ -171,7 +210,37 @@ public abstract class DirectoryResourcePackMixin {
                 }
             }
 
-            // Part 3: Cross-directory renames (e.g., items/empty_armor_slot_* -> gui/sprites/container/slot/*)
+            // Part 3: Virtual double chest halves
+            if (prefix.startsWith("textures/entity/chest") || prefix.equals("textures/entity")
+                    || prefix.equals("textures")) {
+                for (Map.Entry<String, ChestTextureTransformer.ChestHalfInfo> entry :
+                        ChestTextureTransformer.getAllHalves().entrySet()) {
+                    String halfPath = entry.getKey();
+                    if (!halfPath.startsWith(prefix)) {
+                        continue;
+                    }
+                    ChestTextureTransformer.ChestHalfInfo info = entry.getValue();
+                    Identifier doubleId = Identifier.of(namespace, info.doubleTexturePath());
+                    InputSupplier<InputStream> doubleSupplier = self.open(type, doubleId);
+                    if (doubleSupplier != null) {
+                        Identifier halfId = Identifier.of(namespace, halfPath);
+                        boolean isLeft = info.isLeft();
+                        consumer.accept(halfId, () -> {
+                            try (InputStream doubleStream = doubleSupplier.get()) {
+                                byte[] half = ChestTextureTransformer.splitDoubleChest(doubleStream, isLeft);
+                                if (half != null) {
+                                    LegacyPacksMod.LOGGER.info("Legacy Packs: split {} from {}",
+                                            halfId, info.doubleTexturePath());
+                                    return new ByteArrayInputStream(half);
+                                }
+                            }
+                            return null;
+                        });
+                    }
+                }
+            }
+
+            // Part 4: Cross-directory renames (e.g., items/empty_armor_slot_* -> gui/sprites/container/slot/*)
             for (Map.Entry<String, String> entry : PathMappings.CROSS_DIRECTORY_RENAMES.entrySet()) {
                 String legacyPath = entry.getKey();
                 String modernPath = entry.getValue();

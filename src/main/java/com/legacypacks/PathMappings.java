@@ -486,10 +486,11 @@ public class PathMappings {
         // ENTITY TEXTURE RENAMES
         // =====================================================================
         ENTITY_TEXTURE_RENAMES.put("chest/normal.png", "chest/normal.png"); // same
-        ENTITY_TEXTURE_RENAMES.put("chest/normal_double.png", "chest/normal_left.png");
         ENTITY_TEXTURE_RENAMES.put("chest/ender.png", "chest/ender.png"); // same
         ENTITY_TEXTURE_RENAMES.put("chest/trapped.png", "chest/trapped.png"); // same
-        ENTITY_TEXTURE_RENAMES.put("chest/trapped_double.png", "chest/trapped_left.png");
+        // Double chest textures (normal_double, trapped_double, christmas_double)
+        // are handled by ChestTextureTransformer which splits them into left/right
+        // halves with proper UV remapping. Do NOT add simple renames for these.
 
         // =====================================================================
         // GUI RENAMES (old path -> modern path, relative to textures/)
