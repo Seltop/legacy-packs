@@ -115,20 +115,22 @@ public class ChestTextureTransformer {
         int capY = s(vOff, sy);
         int faceY = capY + dY;
 
+        int cap1X = d;
+        int cap2X = d + sw;
         int westX = 0;
         int northX = d;
         int eastX = d + sw;
         int southX = 2 * d + sw;
 
-        // In the atlas, the first cap slot is DOWN and the second is UP.
-        int downX = d;
-        int upX = d + sw;
+        // Caps: swap positions + flip vertically
+        copyRectFlipV(src, dst, cap1X, capY, sw, dY, cap2X, capY);
+        copyRectFlipV(src, dst, cap2X, capY, sw, dY, cap1X, capY);
 
-        copyRect(src, dst, downX, capY, sw, dY, upX, capY);
-        copyRect(src, dst, upX, capY, sw, dY, downX, capY);
+        // North ↔ South: swap positions + flip vertically
+        copyRectFlipV(src, dst, northX, faceY, sw, fH, southX, faceY);
+        copyRectFlipV(src, dst, southX, faceY, sw, fH, northX, faceY);
 
-        copyRectRot180(src, dst, southX, faceY, sw, fH, northX, faceY);
-        copyRectRot180(src, dst, northX, faceY, sw, fH, southX, faceY);
+        // West / East: stay in place + rotate 180°
         copyRectRot180(src, dst, westX, faceY, d, fH, westX, faceY);
         copyRectRot180(src, dst, eastX, faceY, d, fH, eastX, faceY);
     }
@@ -141,18 +143,22 @@ public class ChestTextureTransformer {
         int lockH = s(4, sy);
         int faceY = s(1, sy);
 
-        int downX = s(1, sx);
-        int upX = s(3, sx);
+        int cap1X = s(1, sx);
+        int cap2X = s(3, sx);
         int westX = 0;
         int northX = s(1, sx);
         int eastX = s(3, sx);
         int southX = s(4, sx);
 
-        copyRect(src, dst, downX, 0, faceW, capH, upX, 0);
-        copyRect(src, dst, upX, 0, faceW, capH, downX, 0);
+        // Caps: swap + flip vertically
+        copyRectFlipV(src, dst, cap1X, 0, faceW, capH, cap2X, 0);
+        copyRectFlipV(src, dst, cap2X, 0, faceW, capH, cap1X, 0);
 
-        copyRectRot180(src, dst, southX, faceY, faceW, lockH, northX, faceY);
-        copyRectRot180(src, dst, northX, faceY, faceW, lockH, southX, faceY);
+        // North ↔ South: swap + flip vertically
+        copyRectFlipV(src, dst, northX, faceY, faceW, lockH, southX, faceY);
+        copyRectFlipV(src, dst, southX, faceY, faceW, lockH, northX, faceY);
+
+        // West / East: stay in place + rotate 180°
         copyRectRot180(src, dst, westX, faceY, sideW, lockH, westX, faceY);
         copyRectRot180(src, dst, eastX, faceY, sideW, lockH, eastX, faceY);
     }
@@ -196,38 +202,46 @@ public class ChestTextureTransformer {
         int capY = s(vOff, sy);
         int faceY = capY + dY;
 
+        // Old 128x64 layout:  [empty D][Cap1 FULL_W][Cap2 FULL_W]
+        //                     [West D] [North FULL_W][East D][South FULL_W]
+        int oldCap1X = d;
+        int oldCap2X = d + fullW;
         int oldWestX = 0;
         int oldNorthX = d;
         int oldEastX = d + fullW;
         int oldSouthX = 2 * d + fullW;
-        int oldDownX = d;
-        int oldUpX = d + fullW;
 
+        // New 64x64 layout:   [empty D][Cap2 HALF_W][Cap1 HALF_W]  (caps swapped)
+        //                     [West D] [North HALF_W][East D][South HALF_W]
+        int newCap1X = d + halfW;   // old cap1 goes to second slot
+        int newCap2X = d;           // old cap2 goes to first slot
         int newWestX = 0;
         int newNorthX = d;
         int newEastX = d + halfW;
         int newSouthX = 2 * d + halfW;
-        int newDownX = d;
-        int newUpX = d + halfW;
 
         if (isLeft) {
-            copyRect(old, out, oldDownX, capY, halfW, dY, newUpX, capY);
-            copyRect(old, out, oldUpX, capY, halfW, dY, newDownX, capY);
+            // Caps: extract left half, swap + flipV
+            copyRectFlipV(old, out, oldCap1X, capY, halfW, dY, newCap1X, capY);
+            copyRectFlipV(old, out, oldCap2X, capY, halfW, dY, newCap2X, capY);
 
-            copyRectRot180(old, out, oldNorthX, faceY, halfW, fH, newSouthX, faceY);
-            copyRectRot180(old, out, oldSouthX + halfW, faceY, halfW, fH, newNorthX, faceY);
+            // North↔South: swap + flipV, extract appropriate halves
+            copyRectFlipV(old, out, oldNorthX, faceY, halfW, fH, newSouthX, faceY);
+            copyRectFlipV(old, out, oldSouthX + halfW, faceY, halfW, fH, newNorthX, faceY);
 
-            // Left texture = viewer's left half. Its west face is the seam, east face is outer.
+            // West = seam (fabricated), East = outer (rot180)
             fillFromColumnVFlip(old, out, oldNorthX + halfW - 1, faceY, d, fH, newWestX, faceY);
             copyRectRot180(old, out, oldEastX, faceY, d, fH, newEastX, faceY);
         } else {
-            copyRect(old, out, oldDownX + halfW, capY, halfW, dY, newUpX, capY);
-            copyRect(old, out, oldUpX + halfW, capY, halfW, dY, newDownX, capY);
+            // Caps: extract right half, swap + flipV
+            copyRectFlipV(old, out, oldCap1X + halfW, capY, halfW, dY, newCap1X, capY);
+            copyRectFlipV(old, out, oldCap2X + halfW, capY, halfW, dY, newCap2X, capY);
 
-            copyRectRot180(old, out, oldNorthX + halfW, faceY, halfW, fH, newSouthX, faceY);
-            copyRectRot180(old, out, oldSouthX, faceY, halfW, fH, newNorthX, faceY);
+            // North↔South: swap + flipV, extract appropriate halves
+            copyRectFlipV(old, out, oldNorthX + halfW, faceY, halfW, fH, newSouthX, faceY);
+            copyRectFlipV(old, out, oldSouthX, faceY, halfW, fH, newNorthX, faceY);
 
-            // Right texture = viewer's right half. Its west face is outer, east face is seam.
+            // West = outer (rot180), East = seam (fabricated)
             copyRectRot180(old, out, oldWestX, faceY, d, fH, newWestX, faceY);
             fillFromColumnVFlip(old, out, oldNorthX + halfW, faceY, d, fH, newEastX, faceY);
         }
@@ -240,35 +254,35 @@ public class ChestTextureTransformer {
         int lockH = s(4, sy);
         int faceY = s(1, sy);
 
-        int oldDownX = s(1, sx);
-        int oldUpX = s(3, sx);
+        int oldCap1X = s(1, sx);
+        int oldCap2X = s(3, sx);
         int oldWestX = 0;
         int oldNorthX = s(1, sx);
         int oldEastX = s(3, sx);
         int oldSouthX = s(4, sx);
 
-        int newDownX = s(1, sx);
-        int newUpX = s(2, sx);
+        int newCap1X = s(2, sx);   // old cap1 goes to second slot (swapped)
+        int newCap2X = s(1, sx);   // old cap2 goes to first slot (swapped)
         int newWestX = 0;
         int newNorthX = s(1, sx);
         int newEastX = s(2, sx);
         int newSouthX = s(3, sx);
 
         if (isLeft) {
-            copyRect(old, out, oldDownX, 0, sideW, capH, newUpX, 0);
-            copyRect(old, out, oldUpX, 0, sideW, capH, newDownX, 0);
+            copyRectFlipV(old, out, oldCap1X, 0, sideW, capH, newCap1X, 0);
+            copyRectFlipV(old, out, oldCap2X, 0, sideW, capH, newCap2X, 0);
 
-            copyRectRot180(old, out, oldNorthX, faceY, sideW, lockH, newSouthX, faceY);
-            copyRectRot180(old, out, oldSouthX + sideW, faceY, sideW, lockH, newNorthX, faceY);
+            copyRectFlipV(old, out, oldNorthX, faceY, sideW, lockH, newSouthX, faceY);
+            copyRectFlipV(old, out, oldSouthX + sideW, faceY, sideW, lockH, newNorthX, faceY);
 
             fillFromColumnVFlip(old, out, oldNorthX + sideW - 1, faceY, sideW, lockH, newWestX, faceY);
             copyRectRot180(old, out, oldEastX, faceY, sideW, lockH, newEastX, faceY);
         } else {
-            copyRect(old, out, oldDownX + sideW, 0, sideW, capH, newUpX, 0);
-            copyRect(old, out, oldUpX + sideW, 0, sideW, capH, newDownX, 0);
+            copyRectFlipV(old, out, oldCap1X + sideW, 0, sideW, capH, newCap1X, 0);
+            copyRectFlipV(old, out, oldCap2X + sideW, 0, sideW, capH, newCap2X, 0);
 
-            copyRectRot180(old, out, oldNorthX + sideW, faceY, sideW, lockH, newSouthX, faceY);
-            copyRectRot180(old, out, oldSouthX, faceY, sideW, lockH, newNorthX, faceY);
+            copyRectFlipV(old, out, oldNorthX + sideW, faceY, sideW, lockH, newSouthX, faceY);
+            copyRectFlipV(old, out, oldSouthX, faceY, sideW, lockH, newNorthX, faceY);
 
             copyRectRot180(old, out, oldWestX, faceY, sideW, lockH, newWestX, faceY);
             fillFromColumnVFlip(old, out, oldNorthX + sideW, faceY, sideW, lockH, newEastX, faceY);
@@ -301,6 +315,22 @@ public class ChestTextureTransformer {
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
                 dst.setRGB(dstX + x, dstY + y, src.getRGB(srcX + x, srcY + y));
+            }
+        }
+    }
+
+    private static void copyRectFlipV(BufferedImage src, BufferedImage dst,
+                                      int srcX, int srcY, int w, int h,
+                                      int dstX, int dstY) {
+        w = Math.min(w, Math.min(src.getWidth() - srcX, dst.getWidth() - dstX));
+        h = Math.min(h, Math.min(src.getHeight() - srcY, dst.getHeight() - dstY));
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                dst.setRGB(dstX + x, dstY + (h - 1 - y), src.getRGB(srcX + x, srcY + y));
             }
         }
     }
