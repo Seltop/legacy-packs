@@ -11,16 +11,17 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Transforms pre-1.15 chest textures into the UV layout expected by the modern chest renderer.
+ * Transforms pre-1.15 chest textures into the atlas layout expected by the modern chest renderer.
  *
- * The old chest renderer applies an extra (1, -1, -1) scale before drawing the model. Modern
- * Minecraft does not. Old chest textures were therefore authored for a different face assignment:
+ * Single chest textures are fixed by remapping the legacy 64x64 atlas, not by guessing face swaps:
  *
- * - old north appears on the modern south face
- * - old south appears on the modern north face
- * - old down appears on the modern up face
- * - old up appears on the modern down face
- * - old west/east stay on the same physical side, but their UVs rotate 180 degrees
+ * - the 28x14 regions at (14,0) and (14,19) rotate 180 degrees in place
+ * - west/east strips stay in place and rotate 180 degrees
+ * - north/south strips swap positions and rotate 180 degrees
+ * - the lock follows the same pattern at a smaller scale
+ *
+ * All coordinates are scaled from the actual image size, so 16x, 32x, 64x, 128x, etc. packs all
+ * use the same transform.
  *
  * Double chests add one more complication: old packs provide one 128x64 texture for the full
  * 30px-wide chest, while modern Minecraft expects two separate 64x64 textures for the 15px-wide
@@ -90,8 +91,10 @@ public class ChestTextureTransformer {
 
             BufferedImage out = copyImage(image);
 
-            remapSingleSection(image, out, sx, sy, 0, 5, W);
-            remapSingleSection(image, out, sx, sy, 19, 10, W);
+            remapSingleCap(image, out, sx, sy, 0);
+            remapSingleStrip(image, out, sx, sy, 14, 5);
+            remapSingleCap(image, out, sx, sy, 19);
+            remapSingleStrip(image, out, sx, sy, 33, 10);
             remapSingleLock(image, out, sx, sy);
 
             LegacyPacksMod.LOGGER.info("Legacy Packs: remapped single chest UV layout");
@@ -105,62 +108,54 @@ public class ChestTextureTransformer {
         }
     }
 
-    private static void remapSingleSection(BufferedImage src, BufferedImage dst,
-                                           double sx, double sy,
-                                           int vOff, int faceH, int w) {
-        int d = s(D, sx);
-        int sw = s(w, sx);
-        int fH = s(faceH, sy);
+    private static void remapSingleCap(BufferedImage src, BufferedImage dst,
+                                       double sx, double sy, int vOff) {
+        int w = s(W, sx);
         int dY = s(D, sy);
-        int capY = s(vOff, sy);
-        int faceY = capY + dY;
+        int y = s(vOff, sy);
 
-        int cap1X = d;
-        int cap2X = d + sw;
+        // The lid/base cap row is not one 28x14 rotation. The two 14x14 halves swap places and
+        // each half flips vertically.
+        copyRectFlipV(src, dst, w, y, w, dY, 2 * w, y);
+        copyRectFlipV(src, dst, 2 * w, y, w, dY, w, y);
+    }
+
+    private static void remapSingleStrip(BufferedImage src, BufferedImage dst,
+                                         double sx, double sy,
+                                         int vOff, int faceH) {
+        int d = s(D, sx);
+        int w = s(W, sx);
+        int h = s(faceH, sy);
+        int y = s(vOff, sy);
+
         int westX = 0;
         int northX = d;
-        int eastX = d + sw;
-        int southX = 2 * d + sw;
+        int eastX = d + w;
+        int southX = 2 * d + w;
 
-        // Caps: swap positions + flip vertically
-        copyRectFlipV(src, dst, cap1X, capY, sw, dY, cap2X, capY);
-        copyRectFlipV(src, dst, cap2X, capY, sw, dY, cap1X, capY);
-
-        // North ↔ South: swap positions + flip vertically
-        copyRectFlipV(src, dst, northX, faceY, sw, fH, southX, faceY);
-        copyRectFlipV(src, dst, southX, faceY, sw, fH, northX, faceY);
-
-        // West / East: stay in place + rotate 180°
-        copyRectRot180(src, dst, westX, faceY, d, fH, westX, faceY);
-        copyRectRot180(src, dst, eastX, faceY, d, fH, eastX, faceY);
+        copyRectRot180(src, dst, westX, y, d, h, westX, y);
+        copyRectRot180(src, dst, northX, y, w, h, southX, y);
+        copyRectRot180(src, dst, eastX, y, d, h, eastX, y);
+        copyRectRot180(src, dst, southX, y, w, h, northX, y);
     }
 
     private static void remapSingleLock(BufferedImage src, BufferedImage dst,
                                         double sx, double sy) {
         int sideW = s(1, sx);
         int faceW = s(2, sx);
-        int capH = s(1, sy);
         int lockH = s(4, sy);
         int faceY = s(1, sy);
 
-        int cap1X = s(1, sx);
-        int cap2X = s(3, sx);
         int westX = 0;
         int northX = s(1, sx);
         int eastX = s(3, sx);
         int southX = s(4, sx);
 
-        // Caps: swap + flip vertically
-        copyRectFlipV(src, dst, cap1X, 0, faceW, capH, cap2X, 0);
-        copyRectFlipV(src, dst, cap2X, 0, faceW, capH, cap1X, 0);
-
-        // North ↔ South: swap + flip vertically
-        copyRectFlipV(src, dst, northX, faceY, faceW, lockH, southX, faceY);
-        copyRectFlipV(src, dst, southX, faceY, faceW, lockH, northX, faceY);
-
-        // West / East: stay in place + rotate 180°
+        // The top row of the lock atlas already matches the modern layout.
         copyRectRot180(src, dst, westX, faceY, sideW, lockH, westX, faceY);
+        copyRectRot180(src, dst, northX, faceY, faceW, lockH, southX, faceY);
         copyRectRot180(src, dst, eastX, faceY, sideW, lockH, eastX, faceY);
+        copyRectRot180(src, dst, southX, faceY, faceW, lockH, northX, faceY);
     }
 
     public static byte[] splitDoubleChest(InputStream doubleStream, boolean isLeft) {
@@ -213,8 +208,8 @@ public class ChestTextureTransformer {
 
         // New 64x64 layout:   [empty D][Cap2 HALF_W][Cap1 HALF_W]  (caps swapped)
         //                     [West D] [North HALF_W][East D][South HALF_W]
-        int newCap1X = d + halfW;   // old cap1 goes to second slot
-        int newCap2X = d;           // old cap2 goes to first slot
+        int newCap1X = d + halfW;
+        int newCap2X = d;
         int newWestX = 0;
         int newNorthX = d;
         int newEastX = d + halfW;
@@ -225,7 +220,7 @@ public class ChestTextureTransformer {
             copyRectFlipV(old, out, oldCap1X, capY, halfW, dY, newCap1X, capY);
             copyRectFlipV(old, out, oldCap2X, capY, halfW, dY, newCap2X, capY);
 
-            // North↔South: swap + flipV, extract appropriate halves
+            // North/South: swap + flipV, extract appropriate halves
             copyRectFlipV(old, out, oldNorthX, faceY, halfW, fH, newSouthX, faceY);
             copyRectFlipV(old, out, oldSouthX + halfW, faceY, halfW, fH, newNorthX, faceY);
 
@@ -237,7 +232,7 @@ public class ChestTextureTransformer {
             copyRectFlipV(old, out, oldCap1X + halfW, capY, halfW, dY, newCap1X, capY);
             copyRectFlipV(old, out, oldCap2X + halfW, capY, halfW, dY, newCap2X, capY);
 
-            // North↔South: swap + flipV, extract appropriate halves
+            // North/South: swap + flipV, extract appropriate halves
             copyRectFlipV(old, out, oldNorthX + halfW, faceY, halfW, fH, newSouthX, faceY);
             copyRectFlipV(old, out, oldSouthX, faceY, halfW, fH, newNorthX, faceY);
 
@@ -261,8 +256,8 @@ public class ChestTextureTransformer {
         int oldEastX = s(3, sx);
         int oldSouthX = s(4, sx);
 
-        int newCap1X = s(2, sx);   // old cap1 goes to second slot (swapped)
-        int newCap2X = s(1, sx);   // old cap2 goes to first slot (swapped)
+        int newCap1X = s(2, sx);
+        int newCap2X = s(1, sx);
         int newWestX = 0;
         int newNorthX = s(1, sx);
         int newEastX = s(2, sx);
