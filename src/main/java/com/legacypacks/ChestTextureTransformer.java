@@ -28,7 +28,6 @@ import java.util.Set;
  * left and right halves.
  */
 public class ChestTextureTransformer {
-
     private static final int SINGLE_BASE = 64;
     private static final int DOUBLE_BASE_W = 128;
     private static final int DOUBLE_BASE_H = 64;
@@ -72,6 +71,10 @@ public class ChestTextureTransformer {
 
     public static Map<String, ChestHalfInfo> getAllHalves() {
         return CHEST_HALVES;
+    }
+
+    public static Set<String> getSingleChestPaths() {
+        return SINGLE_CHEST_PATHS;
     }
 
     public static boolean isSingleChestPath(String path) {

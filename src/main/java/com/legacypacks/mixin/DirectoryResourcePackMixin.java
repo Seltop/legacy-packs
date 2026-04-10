@@ -161,6 +161,8 @@ public abstract class DirectoryResourcePackMixin {
         try {
             DirectoryResourcePack self = (DirectoryResourcePack) (Object) this;
 
+            legacypacks_offerExistingChestTransforms(self, type, namespace, prefix, consumer);
+
             // Part 1: Legacy folder scanning
             String legacyPrefix = PathMappings.toLegacyPrefix(prefix);
             if (legacyPrefix != null) {
@@ -257,6 +259,41 @@ public abstract class DirectoryResourcePackMixin {
             }
         } finally {
             legacypacks_active.set(false);
+        }
+    }
+
+    @Unique
+    private static void legacypacks_offerExistingChestTransforms(DirectoryResourcePack self,
+                                                                 ResourceType type,
+                                                                 String namespace,
+                                                                 String prefix,
+                                                                 ResourcePack.ResultConsumer consumer) {
+        if (!prefix.startsWith("textures/entity/chest")
+                && !prefix.equals("textures/entity")
+                && !prefix.equals("textures")) {
+            return;
+        }
+
+        for (String path : ChestTextureTransformer.getSingleChestPaths()) {
+            if (!path.startsWith(prefix)) {
+                continue;
+            }
+
+            Identifier id = Identifier.of(namespace, path);
+            InputSupplier<InputStream> original = self.open(type, id);
+            if (original == null) {
+                continue;
+            }
+
+            consumer.accept(id, () -> {
+                try (InputStream in = original.get()) {
+                    byte[] transformed = ChestTextureTransformer.transformSingleChest(in);
+                    if (transformed != null) {
+                        return new ByteArrayInputStream(transformed);
+                    }
+                }
+                return null;
+            });
         }
     }
 }
