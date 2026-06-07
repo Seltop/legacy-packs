@@ -23,3 +23,5 @@ Thumbs.db
 tmp_refs/
 old_creative_javap.txt
 *.png
+# ...except the mod icon, which must be packaged into the jar
+!src/main/resources/assets/legacy-packs/icon.png
