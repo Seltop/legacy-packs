@@ -4,7 +4,7 @@
     "version": "${version}",
     "name": "Legacy Packs",
     "description": "Automatically translates old resource pack file paths to modern format, making 1.7/1.8 era packs work on modern Minecraft.",
-    "authors": ["LegacyPacks"],
+    "authors": ["Seltop"],
     "contact": {},
     "license": "MIT",
     "icon": "assets/legacy-packs/icon.png",
