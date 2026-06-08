@@ -573,6 +573,16 @@ public class PathMappings {
         }
     }
 
+    // Worn-armor material names that were renamed between the legacy
+    // models/armor system and the modern equipment system.
+    // (modern equipment name -> legacy models/armor name)
+    private static final Map<String, String> MODERN_TO_LEGACY_ARMOR_MATERIAL = new HashMap<>();
+
+    static {
+        // Turtle helmet: old packs used "turtle_layer_1.png"
+        MODERN_TO_LEGACY_ARMOR_MATERIAL.put("turtle_scute", "turtle");
+    }
+
     /**
      * Given a modern Identifier, returns the equivalent legacy Identifier
      * that an old resource pack would use. Returns null if no translation exists.
@@ -627,7 +637,69 @@ public class PathMappings {
         return null;
     }
 
+    /**
+     * Translates a modern worn-armor equipment texture path into the legacy
+     * models/armor layer path that 1.7-1.20 packs ship.
+     *
+     *   textures/entity/equipment/humanoid/diamond.png
+     *       -> textures/models/armor/diamond_layer_1.png
+     *   textures/entity/equipment/humanoid_leggings/diamond.png
+     *       -> textures/models/armor/diamond_layer_2.png
+     *   textures/entity/equipment/humanoid/leather_overlay.png
+     *       -> textures/models/armor/leather_layer_1_overlay.png
+     *
+     * Also handles the matching ".png.mcmeta" animation files. Returns null if
+     * the path is not a humanoid armor equipment texture.
+     */
+    private static String equipmentArmorToLegacy(String path) {
+        final String humanoid = "textures/entity/equipment/humanoid/";
+        final String leggings = "textures/entity/equipment/humanoid_leggings/";
+
+        String rest;
+        String layerSuffix;
+        if (path.startsWith(humanoid)) {
+            rest = path.substring(humanoid.length());
+            layerSuffix = "_layer_1";
+        } else if (path.startsWith(leggings)) {
+            rest = path.substring(leggings.length());
+            layerSuffix = "_layer_2";
+        } else {
+            return null;
+        }
+
+        // Keep the extension (.png or .png.mcmeta) on the end of the legacy name.
+        String ext;
+        if (rest.endsWith(".png.mcmeta")) {
+            ext = ".png.mcmeta";
+        } else if (rest.endsWith(".png")) {
+            ext = ".png";
+        } else {
+            return null;
+        }
+        String material = rest.substring(0, rest.length() - ext.length());
+
+        // Leather's dyeable layer ships an extra "_overlay" texture; that suffix
+        // sits at the very end of the legacy file name (leather_layer_1_overlay).
+        String overlay = "";
+        if (material.endsWith("_overlay")) {
+            overlay = "_overlay";
+            material = material.substring(0, material.length() - overlay.length());
+        }
+
+        material = MODERN_TO_LEGACY_ARMOR_MATERIAL.getOrDefault(material, material);
+
+        return "textures/models/armor/" + material + layerSuffix + overlay + ext;
+    }
+
     private static String toLegacyPath(String path) {
+        // Worn armor layers: the 1.21.2+ "equipment" system replaced the old
+        // models/armor layer textures. The held/inventory item texture lives in
+        // textures/item/ (handled below), but the texture rendered ON the player
+        // moved to textures/entity/equipment/humanoid[_leggings]/<material>.png.
+        String legacyArmor = equipmentArmorToLegacy(path);
+        if (legacyArmor != null) {
+            return legacyArmor;
+        }
         // Block textures: textures/block/X -> textures/blocks/OLD_X
         if (path.startsWith("textures/block/")) {
             String name = path.substring("textures/block/".length());
