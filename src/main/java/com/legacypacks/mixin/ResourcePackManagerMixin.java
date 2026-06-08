@@ -2,6 +2,7 @@ package com.legacypacks.mixin;
 
 import com.legacypacks.ChestTextureTransformer;
 import com.legacypacks.LegacyPacksMod;
+import com.legacypacks.LogoTextureTransformer;
 import com.legacypacks.PathMappings;
 import com.legacypacks.SpriteSheetSlicing;
 import com.legacypacks.TextureTransformer;
@@ -42,6 +43,21 @@ public abstract class ResourcePackManagerMixin {
             cir.setReturnValue(() -> {
                 try (InputStream in = original.get()) {
                     byte[] transformed = TextureTransformer.transform(path, in);
+                    if (transformed != null) {
+                        return new ByteArrayInputStream(transformed);
+                    }
+                }
+                return null;
+            });
+            return;
+        }
+
+        // Title logo relayout (pack HAS the texture but the layout changed in 1.20)
+        if (cir.getReturnValue() != null && LogoTextureTransformer.isLogoPath(id.getPath())) {
+            InputSupplier<InputStream> original = cir.getReturnValue();
+            cir.setReturnValue(() -> {
+                try (InputStream in = original.get()) {
+                    byte[] transformed = LogoTextureTransformer.transformLogo(in);
                     if (transformed != null) {
                         return new ByteArrayInputStream(transformed);
                     }
