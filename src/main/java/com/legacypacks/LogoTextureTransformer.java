@@ -44,6 +44,10 @@ public class LogoTextureTransformer {
     // modern strip and left untouched; square-ish logos are the old format.
     private static final double MODERN_RATIO_THRESHOLD = 2.0;
 
+    // Minimum alpha for a pixel to count as part of the word when measuring its
+    // horizontal extent (skips faint anti-aliased fringe).
+    private static final int ALPHA_THRESHOLD = 10;
+
     public static boolean isLogoPath(String path) {
         return LOGO_PATH.equals(path);
     }
@@ -66,27 +70,51 @@ public class LogoTextureTransformer {
             int srcH = (int) Math.round(HALF_H * scale);
             int rightSrcY = (int) Math.round(RIGHT_V * scale);
 
+            // Join the two halves side by side at native resolution. The old menu
+            // drew them with their inner edges touching, so a 1:1 copy reproduces
+            // the seam exactly.
+            BufferedImage joined = new BufferedImage(halfSrcW * 2, srcH, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D gj = joined.createGraphics();
+            gj.drawImage(src, 0, 0, halfSrcW, srcH, 0, 0, halfSrcW, srcH, null);
+            gj.drawImage(src, halfSrcW, 0, halfSrcW * 2, srcH,
+                    0, rightSrcY, halfSrcW, rightSrcY + srcH, null);
+            gj.dispose();
+
+            // Find the word's horizontal ink bounds. Old packs often leave the
+            // word left-aligned (the M hugs x=0 but the final letter stops short
+            // of the right edge), which would render the logo off-centre. Vanilla
+            // bleeds the word to both edges, so we crop to the ink and do the same.
+            int[] pixels = joined.getRGB(0, 0, joined.getWidth(), joined.getHeight(), null, 0, joined.getWidth());
+            int minX = joined.getWidth();
+            int maxX = -1;
+            for (int y = 0; y < joined.getHeight(); y++) {
+                int row = y * joined.getWidth();
+                for (int x = 0; x < joined.getWidth(); x++) {
+                    if (((pixels[row + x] >>> 24) & 0xFF) > ALPHA_THRESHOLD) {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                    }
+                }
+            }
+            if (maxX < minX) {
+                // Fully transparent - nothing sensible to rebuild.
+                return originalBytes;
+            }
+            int cropW = maxX - minX + 1;
+
             int outW = src.getWidth();
             int outH = Math.round(outW / (float) MODERN_ASPECT);
-            int halfDstW = outW / 2;
             // Vertical scale matches source (outH / 64 == scale), so the letter
-            // height is preserved; only the width is nudged to fill the strip.
+            // height is preserved; the word is stretched across the full width.
             int dstH = srcH;
 
             BufferedImage out = new BufferedImage(outW, outH, BufferedImage.TYPE_INT_ARGB);
             Graphics2D g = out.createGraphics();
             g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
                     RenderingHints.VALUE_INTERPOLATION_BILINEAR);
-
-            // Left half ("MINEC...") -> left side of the strip.
-            g.drawImage(src,
-                    0, 0, halfDstW, dstH,
-                    0, 0, halfSrcW, srcH,
-                    null);
-            // Right half ("...RAFT") -> right side of the strip.
-            g.drawImage(src,
-                    halfDstW, 0, outW, dstH,
-                    0, rightSrcY, halfSrcW, rightSrcY + srcH,
+            g.drawImage(joined,
+                    0, 0, outW, dstH,
+                    minX, 0, minX + cropW, srcH,
                     null);
             g.dispose();
 
